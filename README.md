@@ -1,7 +1,22 @@
+# Dashplotter
 
+A dash application to quickly plot scatter plots from csv files.
 
+## Install
 
-## Install redis
+```
+pipenv install
+```
+
+## Run
+
+```
+pipenv shell
+cd app
+python run.py
+```
+
+## (Optional) Install redis
 
 ```
 brew install redis

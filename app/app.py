@@ -12,6 +12,7 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 
 import pandas as pd
+import peakutils
 
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -69,7 +70,11 @@ def parse_contents(contents, filename):
     return filebase, df
 
 
-def populate_subplots(dataframes):
+def populate_subplots(dataframes, peak_indexes=None):
+    '''
+    Create scatter plots with shared x axis ffrom the dataframes in the
+    `dataframes` dictionary.
+    '''
 
     plot_height = 400
     show_all_tick_labels = False
@@ -87,6 +92,13 @@ def populate_subplots(dataframes):
         fig.add_trace(go.Scatter(x=df.iloc[:, 0], y=df.iloc[:, 1],
                                  mode='lines', name=display_name),
                       row=i, col=1)
+        if peak_indexes is not None:
+            fig.add_trace(go.Scatter(x=df.iloc[peak_indexes[filebase], 0],
+                                     y=df.iloc[peak_indexes[filebase], 1],
+                                     mode='markers', name='peaks',
+                                     marker=dict(size=7, symbol='star-diamond',
+                                     color='Crimson')),
+                          row=i, col=1)
         fig.update_yaxes(title_text=display_name, row=i, col=1)
 
     if show_all_tick_labels:
@@ -117,6 +129,20 @@ def populate_subplots(dataframes):
     return [graph]
 
 
+def find_peaks(dataframes, thres=0.2, min_dist=10):
+    '''
+    Find indices of peak for each DataFrame
+    '''
+
+    peak_indexes = dict()
+    for k, df in dataframes.items():
+
+        peak_indexes[k] = peakutils.indexes(
+            df.iloc[:, 1].values, thres=thres, min_dist=min_dist)
+
+    return peak_indexes
+
+
 @app.callback(Output('output-data-upload', 'children'),
               [Input('upload-data', 'contents')],
               [State('upload-data', 'filename')])
@@ -129,5 +155,7 @@ def update_output(list_of_contents, list_of_names):
             filebase, df = parse_contents(c, n)
             dataframes[filebase] = df
 
+    peak_indexes = find_peaks(dataframes)
     children = populate_subplots(dataframes)
+
     return children

@@ -14,6 +14,7 @@ dash = "*"
 redis = "*"
 dash-bootstrap-components = "*"
 peakutils = "*"
+gunicorn = "*"
 
 [requires]
 python_version = "3.7"

@@ -12,6 +12,8 @@ plotly = "*"
 pandas = "*"
 dash = "*"
 redis = "*"
+dash-bootstrap-components = "*"
+peakutils = "*"
 
 [requires]
 python_version = "3.7"

@@ -1,17 +1,18 @@
 import base64
 import io
+import os
+import re
 
 import dash
 from dash.dependencies import Input, Output, State
 import dash_core_components as dcc
 import dash_html_components as html
+
 import plotly.graph_objs as go
+from plotly.subplots import make_subplots
 
 import pandas as pd
 
-import redis
-
-R = redis.Redis()
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
@@ -41,83 +42,79 @@ app.layout = html.Div([
 ])
 
 
-def make_graph(data):
-    '''
-    Create the graph
-
-    Args:
-        data (pandas.DataFrame): data
-    '''
-
-    layout = go.Layout(
-        title='Plot',
-        showlegend=True
-    )
-
-    graph = dcc.Graph(
-        id='plot{}'.format(data.columns[1]),
-        figure=go.Figure(
-            data=[
-                go.Scattergl(
-                    x=data.iloc[:, 0],
-                    y=data.iloc[:, 1],
-                    mode='lines',
-                )
-            ],
-            layout=layout,
-        )
-    )
-
-    return graph
-
-
 def parse_contents(contents, filename):
-    content_type, content_string = contents.split(',')
+    '''
+    Parse a file
+    '''
 
+    content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
+    filebase, ext = os.path.splitext(filename)
+
     try:
-        if 'csv' in filename:
-            # Assume that the user uploaded a CSV file
+        if ext.lower() == '.csv':
             df = pd.read_csv(
                 io.StringIO(decoded.decode('utf-8')))
-        elif 'xls' in filename:
-            # Assume that the user uploaded an excel file
+        elif ext.lower() == '.xls':
             df = pd.read_excel(io.BytesIO(decoded))
+        elif ext.lower() == '.dat':
+            df = pd.read_csv(io.StringIO(decoded.decode('utf-8')),
+                             sep='\s+', engine='python')
     except Exception as e:
         print(e)
         return html.Div([
             'There was an error processing this file.'
         ])
 
-    return R.set(filename, df.to_json())
+    return filebase, df
 
 
-def populate_content():
+def populate_subplots(dataframes):
 
-    children = []
+    plot_height = 400
+    show_all_tick_labels = False
 
-    for filename in R.keys():
-        df = pd.read_json(R.get(filename).decode('utf-8'))
-        children.append(
-            html.Div([
-                html.H5(filename.decode('utf-8')),
+    n_plots = len(dataframes)
+    if n_plots == 0:
+        return []
 
-                html.Div(
-                    make_graph(df)
-                ),
+    fig = make_subplots(
+        rows=n_plots, cols=1, shared_xaxes=True, vertical_spacing=0.02,
+    )
 
-                html.Hr(),  # horizontal line
+    for i, (filebase, df) in enumerate(dataframes.items(), start=1):
+        display_name = ' '.join(re.split(r'[_=.,\s]', filebase))
+        fig.add_trace(go.Scatter(x=df.iloc[:, 0], y=df.iloc[:, 1],
+                                 mode='lines', name=display_name),
+                      row=i, col=1)
+        fig.update_yaxes(title_text=display_name, row=i, col=1)
 
-                # For debugging, display the raw contents provided by the web browser
-                html.Div(', '.join([k.decode('utf-8') for k in R.keys()])),
-                html.Div('Raw Content'),
-                # html.Pre(contents[0:200] + '...', style={
-                #     'whiteSpace': 'pre-wrap',
-                #     'wordBreak': 'break-all'
-                # })
-            ])
-        )
-    return children
+    if show_all_tick_labels:
+        for i in range(n_plots):
+            xaxis_name = 'xaxis' if i == 0 else f'xaxis{i + 1}'
+            getattr(fig.layout, xaxis_name).showticklabels = True
+
+    for item in fig.layout['annotations']:
+        item.xanchor = 'left'
+        item.x = 0.0
+
+    fig.update_layout(height=plot_height * n_plots, showlegend=False,
+                      template='ggplot2',
+                      margin=go.layout.Margin(
+                          l=75,
+                          r=50,
+                          b=50,
+                          t=50,
+                          pad=4
+                      )
+    )
+
+    graph = dcc.Graph(
+        id='plots',
+        figure=fig
+    )
+
+    return [graph]
 
 
 @app.callback(Output('output-data-upload', 'children'),
@@ -125,13 +122,12 @@ def populate_content():
               [State('upload-data', 'filename')])
 def update_output(list_of_contents, list_of_names):
 
+    dataframes = {}
+
     if list_of_contents:
         for c, n in zip(list_of_contents, list_of_names):
-            parse_contents(c, n)
+            filebase, df = parse_contents(c, n)
+            dataframes[filebase] = df
 
-    children = populate_content()
+    children = populate_subplots(dataframes)
     return children
-
-
-if __name__ == '__main__':
-    app.run_server(debug=True)

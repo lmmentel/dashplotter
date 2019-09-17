@@ -120,7 +120,7 @@ def populate_subplots(dataframes, peak_indexes=None):
                           pad=4
                       )
     )
-
+    fig.update_xaxes(autorange='reversed')
     graph = dcc.Graph(
         id='plots',
         figure=fig
